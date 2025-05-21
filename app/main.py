@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.routers import auth
 from app.routers import events
-from app.models.user import User
+# from app.models.user import User
 from app.core.database import engine
 from sqlmodel import SQLModel
 

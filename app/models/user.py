@@ -1,5 +1,5 @@
-from sqlmodel import SQLModel, Field
-from typing import Optional
+from sqlmodel import SQLModel, Field, Relationship
+from typing import Optional, List
 import enum
 
 class RoleEnum(str, enum.Enum):
@@ -16,4 +16,7 @@ class User(SQLModel, table=True):
     hashed_password: str
     role: RoleEnum = RoleEnum.viewer
     is_active: bool = True
+    events: List["Event"] = Relationship(back_populates="owner")
+
+
 
