@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 from app.schemas.event import EventCreate, EventRead, EventUpdate
 from app.models.event import Event
