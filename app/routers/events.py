@@ -9,22 +9,57 @@ from app.models.permission import EventPermission
 from app.models.version import EventVersion
 from app.schemas.version import EventVersionRead
 from app.schemas.permission import ShareUserPermission, PermissionRead
+from app.services.diff import diff_versions
+from sqlalchemy import and_
+from datetime import datetime
+
+
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 
+def check_conflict(session: Session, owner_id: int, start_time: datetime, end_time: datetime, exclude_event_id: int | None = None):
+    """
+    Raise 409 if the owner already has an event overlapping [start_time, end_time].
+    """
+    query = select(Event).where(
+        Event.owner_id == owner_id,
+        Event.start_time < end_time,
+        Event.end_time > start_time,
+    )
+    if exclude_event_id is not None:
+        query = query.where(Event.id != exclude_event_id)
+
+    conflict = session.exec(query).first()
+    if conflict:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Time conflict with event ID {conflict.id}"
+        )
+
+
+
+
+
 @router.post("/", response_model=EventRead)
 def create_event(
-    event: EventCreate,
+    event_create: EventCreate,
     session: Session = Depends(get_session),
-    user: User = Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
-    new_event = Event(**event.dict(), owner_id=user.id)
+    # Conflict check for this new event
+    check_conflict(
+        session,
+        owner_id=user.id,
+        start_time=event_create.start_time,
+        end_time=event_create.end_time
+    )
+
+    new_event = Event(**event_create.dict(), owner_id=user.id)
     session.add(new_event)
     session.commit()
     session.refresh(new_event)
     return new_event
-
 
 @router.get("/", response_model=list[EventRead])
 def list_events(
@@ -135,61 +170,71 @@ def delete_permission(
     return {"detail": "Permission removed"}
 
 
+
 @router.put("/{event_id}", response_model=EventRead)
 def update_event(
     event_id: int,
     event_update: EventUpdate,
     session: Session = Depends(get_session),
-    user: User = Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     event = session.get(Event, event_id)
-
     if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
-    # Permission check
+    # Permission check (owner or editor)
     if event.owner_id != user.id:
-        permission = session.exec(
+        perm = session.exec(
             select(EventPermission).where(
                 EventPermission.event_id == event_id,
                 EventPermission.user_id == user.id
             )
         ).first()
-        if not permission or permission.role not in ["owner", "editor"]:
-            raise HTTPException(status_code=403, detail="No permission to edit")
+        if not perm or perm.role not in ("owner", "editor"):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission to edit")
 
-    # Save previous version
-    latest_version = session.exec(
+    # Save previous version snapshot
+    latest = session.exec(
         select(EventVersion)
         .where(EventVersion.event_id == event_id)
         .order_by(EventVersion.version_number.desc())
     ).first()
+    next_version = (latest.version_number + 1) if latest else 1
 
-    version_number = (latest_version.version_number + 1) if latest_version else 1
-
-    version = EventVersion(
+    session.add(EventVersion(
         event_id=event.id,
-        version_number=version_number,
+        version_number=next_version,
         title=event.title,
         description=event.description,
         start_time=event.start_time,
         end_time=event.end_time,
         location=event.location,
         updated_by=user.id
+    ))
+
+    # Determine new times for conflict check
+    new_start = event_update.start_time or event.start_time
+    new_end   = event_update.end_time   or event.end_time
+
+    # Conflict check against *owner*’s other events
+    check_conflict(
+        session,
+        owner_id=event.owner_id,
+        start_time=new_start,
+        end_time=new_end,
+        exclude_event_id=event_id
     )
-    session.add(version)
 
     # Apply updates
-    event.title = event_update.title or event.title
+    event.title       = event_update.title       or event.title
     event.description = event_update.description or event.description
-    event.start_time = event_update.start_time or event.start_time
-    event.end_time = event_update.end_time or event.end_time
-    event.location = event_update.location or event.location
+    event.start_time  = new_start
+    event.end_time    = new_end
+    event.location    = event_update.location    or event.location
 
     session.commit()
     session.refresh(event)
     return event
-
 @router.get("/{event_id}/history/{version_id}", response_model=EventVersionRead)
 def get_version(
     event_id: int,
@@ -250,3 +295,40 @@ def rollback_event(
     session.commit()
     session.refresh(event)
     return event
+
+
+
+@router.get("/{event_id}/changelog", response_model=list[EventVersionRead], tags=["changelog"])
+def get_changelog(
+    event_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    # Ensure user can view (owner/editor/viewer)
+    event = session.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    # Optionally check sharing permissions here...
+    
+    versions = session.exec(
+        select(EventVersion)
+        .where(EventVersion.event_id == event_id)
+        .order_by(EventVersion.version_number)
+    ).all()
+    return versions
+
+
+
+@router.get("/{event_id}/diff/{v1_id}/{v2_id}", tags=["changelog"])
+def get_diff(
+    event_id: int,
+    v1_id: int,
+    v2_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    v1 = session.get(EventVersion, v1_id)
+    v2 = session.get(EventVersion, v2_id)
+    if not v1 or not v2 or v1.event_id != event_id or v2.event_id != event_id:
+        raise HTTPException(404, "One or both versions not found")
+    return diff_versions(v1, v2)
