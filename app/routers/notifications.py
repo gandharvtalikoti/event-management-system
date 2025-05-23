@@ -1,5 +1,3 @@
-# app/routers/notifications.py
-
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from typing import Dict, List
 from app.core.dependencies import get_current_user_ws
