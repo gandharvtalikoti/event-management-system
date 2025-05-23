@@ -8,25 +8,32 @@ from sqlmodel import SQLModel
 from fastapi import FastAPI
 
 app = FastAPI(
-    title="CollabEvents API",
+    title="Collaborative Event Management System",
     description="""
-    🚀 Collaborative Event Management System API
+🚀 Collaborative Event Management System API
 
-    This API allows users to create, update, and share events with versioning,
-    conflict detection, real-time notifications, and role-based permissions.
+This API allows users to create, update, and share events with:
+- Versioning (full changelogs & rollback)
+- Conflict detection (no overlapping events)
+- Real-time WebSocket notifications
+- Role-based permissions (Owner, Editor, Viewer)
 
-    ## Features
-    - 🔐 JWT Authentication
-    - 🗓️ Event creation, editing & conflict detection
-    - 🧑‍🤝‍🧑 Sharing with role-based access
-    - 🔄 Versioning with changelogs
-    - 🔔 Real-time WebSocket notifications
+## Quick Links
+- 📦 [GitHub Repo](https://github.com/gandharvtalikoti/event-management-system)
+- 🌐 [My Portfolio](https://gandharv-portfolio.vercel.app/)
+
+## Features
+- 🔐 JWT Authentication  
+- 🗓️ Event creation, editing & conflict checks  
+- 🧑‍🤝‍🧑 Sharing with granular access control  
+- 🔄 Full version history & diff  
+- 🔔 Live notifications over WebSocket  
     """,
     version="1.0.0",
     contact={
-        "name": "Gandharv",
-        "url": "https://github.com/yourgithub",  # Change if needed
-        "email": "youremail@example.com",
+        "name": "Gandharv Talikoti",
+        "url": "https://gandharv-portfolio.vercel.app/",
+        "email": "gandharvwork@example.com",
     },
     license_info={
         "name": "MIT License",
@@ -34,8 +41,14 @@ app = FastAPI(
     },
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    swagger_ui_parameters={
+        "docExpansion": "none",
+        "defaultModelsExpandDepth": -1,
+        "displayRequestDuration": True,
+    }
 )
+
 
 
 @app.on_event("startup")
