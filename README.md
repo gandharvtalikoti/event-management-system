@@ -55,9 +55,17 @@ A production-grade FastAPI backend for creating, sharing, and managing events wi
 
 ---
 
+
 ## 🚀 Getting Started
 
 1. **Clone Repo**  
    ```bash
    git clone https://github.com/gandharvtalikoti/event-management-system.git
    cd event-management-system
+2. Start the server
+uvicorn app.main:app --reload
+
+Open Swagger UI → http://127.0.0.1:8000/docs
+Open Redoc → http://127.0.0.1:8000/redoc
+Start testing!
+
