@@ -1,8 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
-
-
+from typing import Optional, List
 
 class EventCreate(BaseModel):
     title: str
@@ -12,6 +10,9 @@ class EventCreate(BaseModel):
     location: Optional[str] = None
     is_recurring: bool = False
     recurrence_pattern: Optional[str] = None
+
+class EventBatchCreate(BaseModel):
+    events: List[EventCreate]
 
 class EventRead(BaseModel):
     id: int
